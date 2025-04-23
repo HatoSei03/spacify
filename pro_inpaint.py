@@ -62,6 +62,7 @@ net.eval()
 
 net_inpa = importlib.import_module('model.' + args.model)
 in_model = net_inpa.InpaintGenerator(args).to(device)
+args.pre_train = 'pretrained_models/G0185000.pt'
 in_model.load_state_dict(torch.load(args.pre_train, map_location=device))
 in_model.eval()
 
