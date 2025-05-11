@@ -16,13 +16,14 @@ class Equirec2Cube(nn.Module):
         self.equ_w = equ_h * 2
         self.FoV = FoV / 180.0 * np.pi
         self.r_lst = np.array([
-            [0, -180.0, 0],
-            [90.0, 0, 0],
-            [0, 0, 0],
-            [0, 90, 0],
-            [0, -90, 0],
-            [-90, 0, 0]
+            [0, -180.0, 0], #mặt sau
+            [90.0, 0, 0], #mặt trên
+            [0, 0, 0], #mặt trước
+            [0, 90, 0], #mặt phải
+            [0, -90, 0], #mặt trái
+            [-90, 0, 0] #mặt dưới
         ], np.float32) / 180.0 * np.pi
+        # chuyển đổi các góc quay sang ma trận quay
         self.R_lst = [cv2.Rodrigues(x)[0] for x in self.r_lst]
         grids = self._getCubeGrid()
         
@@ -30,13 +31,15 @@ class Equirec2Cube(nn.Module):
             self.register_buffer('grid_%d'%i, grid)
 
     def _getCubeGrid(self):
-        f = 0.5 * self.cube_dim / np.tan(0.5 * self.FoV)
-        cx = (self.cube_dim - 1) / 2
+        # Tính nội tham số của camera
+        f = 0.5 * self.cube_dim / np.tan(0.5 * self.FoV) # tiêu cự
+        cx = (self.cube_dim - 1) / 2 # tọa độ trung tâm của khối lập phương
         cy = cx
         x = np.tile(np.arange(self.cube_dim)[None, ..., None], [self.cube_dim, 1, 1])
         y = np.tile(np.arange(self.cube_dim)[..., None, None], [1, self.cube_dim, 1])
         ones = np.ones_like(x)
         xyz = np.concatenate([x, y, ones], axis=-1)
+        # ma trận nội của camera
         K = np.array([
             [f, 0, cx],
             [0, f, cy],

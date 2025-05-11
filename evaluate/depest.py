@@ -68,7 +68,7 @@ transform = transforms.Compose([transforms.ToTensor()])
 #img = np.expand_dims(img, axis=0)  # 假设你想在第一个维度上添加一个维度
 def depth_est(img, net):
     with torch.no_grad():
-        #trans转换，模型预测，得到输出，转换为cpu
+        #trans chuyển đổi, mô hình dự đoán, kết quả đầu ra, chuyển sang CPU
         img = transform(img)
         img = torch.unsqueeze(img, 0)
         inputs = img.float().cuda()

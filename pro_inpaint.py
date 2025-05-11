@@ -123,10 +123,11 @@ def translate(crd, rgb, d, cam=[]):
     phi = np.zeros(y.shape)
     x1 = np.zeros(z.shape)
     y1 = np.zeros(z.shape)
-
+    # chuyển đổi tọa độ 3D sang tọa độ góc (spherical coordinates)
     theta[idx] = np.arctan2(y[idx], np.sqrt(np.square(x[idx]) + np.square(z[idx])))
     phi[idx] = np.arctan2(-z[idx], x[idx])
 
+    # chuyển đổi tọa độ góc sang tọa độ pixel trong ảnh panorama
     x1[idx] = (0.5 - theta[idx] / np.pi) * H  # - 0.5  # (1 - np.sin(theta[idx]))*H/2 - 0.5
     y1[idx] = (0.5 - phi[idx] / (2 * np.pi)) * W  # - 0.5
 
@@ -142,6 +143,7 @@ def translate(crd, rgb, d, cam=[]):
     new_d = new_d[mask]
     rgb = rgb[mask]
 
+    # sắp xếp lại các điểm dựa trên độ sâu giảm dần, để xử lý che khuất
     reorder = np.argsort(-new_d)
     x = x[reorder]
     y = y[reorder]
@@ -180,10 +182,11 @@ def generate(input_rgb, input_depth, flag, dir, first):
 
     _theta = (1 - 2 * (_x) / H) * np.pi / 2  # latitude
     _phi = 2 * np.pi * (0.5 - (_y) / W)  # longtitude
-
+    # Tính toán 3 trục tọa độ
     axis0 = (np.cos(_theta) * np.cos(_phi)).reshape(H, W, 1)
     axis1 = np.sin(_theta).reshape(H, W, 1)
     axis2 = (-np.cos(_theta) * np.sin(_phi)).reshape(H, W, 1)
+    # tính toán tọa độ 3D dựa trên độ sâu d
     coord = np.concatenate((axis0, axis1, axis2), axis=2) * d
 
     cam_pos = []
