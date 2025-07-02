@@ -112,8 +112,15 @@ def demo_all_colormaps():
         
         # Add to comparison plot
         normalized_depth, vmin, vmax = visualizer.normalize_depth(depth_map)
-        im = axes[row, col].imshow(normalized_depth, cmap=colormap)
-        axes[row, col].set_title(f"{colormap.title()}\n({vmin:.2f} - {vmax:.2f})")
+        
+        # Handle custom colormap differently
+        if colormap == 'custom':
+            im = axes[row, col].imshow(depth_vis)
+            axes[row, col].set_title(f"{colormap.title()}\n({vmin:.2f} - {vmax:.2f})")
+        else:
+            im = axes[row, col].imshow(normalized_depth, cmap=colormap)
+            axes[row, col].set_title(f"{colormap.title()}\n({vmin:.2f} - {vmax:.2f})")
+        
         axes[row, col].axis('off')
         
         # Create side-by-side

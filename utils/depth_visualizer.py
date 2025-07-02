@@ -75,14 +75,21 @@ class DepthVisualizer:
             # Create figure with colorbar
             fig, ax = plt.subplots(1, 1, figsize=(12, 6))
             
-            im = ax.imshow(normalized_depth, cmap=self.colormap, vmin=0, vmax=1)
-            ax.set_title(f"{title}\n(Range: {vmin:.3f} - {vmax:.3f})")
+            # Handle custom colormap differently
+            if self.colormap == 'custom':
+                # For custom colormap, display the colored result directly
+                im = ax.imshow(colored_depth)
+                ax.set_title(f"{title} (Custom Colormap)\n(Range: {vmin:.3f} - {vmax:.3f})")
+            else:
+                # Use matplotlib colormap
+                im = ax.imshow(normalized_depth, cmap=self.colormap, vmin=0, vmax=1)
+                ax.set_title(f"{title}\n(Range: {vmin:.3f} - {vmax:.3f})")
+                
+                # Add colorbar only for matplotlib colormaps
+                cbar = plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+                cbar.set_label('Depth Value', rotation=270, labelpad=20)
+            
             ax.axis('off')
-            
-            # Add colorbar
-            cbar = plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-            cbar.set_label('Depth Value', rotation=270, labelpad=20)
-            
             plt.tight_layout()
             plt.savefig(save_path, dpi=150, bbox_inches='tight')
             plt.close()
@@ -113,13 +120,22 @@ class DepthVisualizer:
         ax1.axis('off')
         
         normalized_depth, vmin, vmax = self.normalize_depth(depth_map)
-        im = ax2.imshow(normalized_depth, cmap=self.colormap)
-        ax2.set_title(f"Depth Map ({vmin:.3f} - {vmax:.3f})")
-        ax2.axis('off')
         
-        # Add colorbar to depth subplot
-        cbar = plt.colorbar(im, ax=ax2, fraction=0.046, pad=0.04)
-        cbar.set_label('Depth', rotation=270, labelpad=15)
+        # Handle custom colormap
+        if self.colormap == 'custom':
+            # For custom colormap, display the colored result directly
+            im = ax2.imshow(depth_vis)
+            ax2.set_title(f"Depth Map (Custom) ({vmin:.3f} - {vmax:.3f})")
+        else:
+            # Use matplotlib colormap
+            im = ax2.imshow(normalized_depth, cmap=self.colormap)
+            ax2.set_title(f"Depth Map ({vmin:.3f} - {vmax:.3f})")
+            
+            # Add colorbar only for matplotlib colormaps
+            cbar = plt.colorbar(im, ax=ax2, fraction=0.046, pad=0.04)
+            cbar.set_label('Depth', rotation=270, labelpad=15)
+        
+        ax2.axis('off')
         
         plt.suptitle(title, fontsize=16)
         plt.tight_layout()
