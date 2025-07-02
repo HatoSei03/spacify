@@ -71,3 +71,55 @@ def inpaint(mask, rgb, in_model, upsampler):
     ori_rgb[ori_mask] = equirec_img[ori_mask]
 
     return ori_rgb
+
+def inpaint_optimized(mask, rgb, in_model, upsampler):
+    """Phiên bản tối ưu của inpaint với batch processing"""
+    e2c = Equirec2Cube(512, 512).to(device)
+    c2e = Cube2Equirec(1024, 512).to(device)
+    
+    ori_mask = (mask == 255.0)
+    ori_rgb = rgb.copy()
+    
+    mask = mask.astype(np.float32) / 255.0
+    batch_mask = np.repeat(mask[:, :, np.newaxis], 3, axis=2)
+    batch_img = ori_rgb.astype(np.float32) / 255.0
+    
+    batch_img = torch.FloatTensor(batch_img).permute(2, 0, 1)[None, ...].to(device)
+    batch_mask = torch.FloatTensor(batch_mask).permute(2, 0, 1)[None, ...].to(device)
+    
+    cubemap_img = e2c(batch_img)
+    cubemap_mask = e2c(batch_mask)
+    
+    # Batch process tất cả 6 faces cùng lúc
+    cubemap_img = cubemap_img.permute(0, 2, 3, 1).cpu().numpy()
+    cubemap_mask = cubemap_mask.permute(0, 2, 3, 1).cpu().numpy()
+    
+    # Prepare batch input
+    batch_inputs = []
+    batch_masks = []
+    
+    for i in range(6):
+        cubemap_mask[i] = (cubemap_mask[i] > 0).astype(int)
+        face_mask = (cubemap_mask[i] * 255.0).astype(np.uint8)
+        true_mask = (face_mask == 255)
+        cubemap_img[i][true_mask] = 1.0
+        face_img = (cubemap_img[i] * 255.0).astype(np.uint8)
+        
+        batch_inputs.append(face_img)
+        batch_masks.append(face_mask[:,:,0])
+    
+    # Batch inpaint tất cả faces
+    inpaint_images = torch.zeros(6, 3, 512, 512, dtype=torch.float32).to(device)
+    
+    for i in range(6):
+        inpainted = main_worker(batch_masks[i], batch_inputs[i], in_model)
+        new_inpaint = torch.FloatTensor(inpainted.astype(np.float32)/255.0).permute(2, 0, 1)[None, ...].to(device)
+        inpaint_images[i] = new_inpaint
+    
+    equirec_img = c2e(inpaint_images)
+    equirec_img = equirec_img.permute(0, 2, 3, 1).cpu().numpy()
+    equirec_img = (equirec_img * 255).astype(np.uint8)
+    equirec_img = equirec_img.squeeze(0)
+    
+    ori_rgb[ori_mask] = equirec_img[ori_mask]
+    return ori_rgb
