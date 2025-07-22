@@ -12,9 +12,10 @@ from txt2panoimg import Text2360PanoramaImagePipeline
 from img2panoimg import Image2360PanoramaImagePipeline
 import gc
 import clip
+import open_clip
 
 prompts = []
-with open('prompts.csv', 'r', encoding='utf-8') as f:
+with open('./data/prompts.csv', 'r', encoding='utf-8') as f:
     reader = csv.DictReader(f)
     for row in reader:
         if row.get('description'):
@@ -25,19 +26,21 @@ os.makedirs('outputs/best_of_n', exist_ok=True)
 os.makedirs('outputs/flux2d', exist_ok=True)
 os.makedirs('outputs/flux2pano', exist_ok=True)
 
-# MobileCLIP-S1 setup (nhẹ hơn ViT-L/14)
+# CLIP setup: dùng MobileCLIP-S1 (clip-vit-base-patch16-224-multilingual-v2)
 device = "cuda" if torch.cuda.is_available() else "cpu"
-clip_model, clip_preprocess = clip.load("ViT-L-14", device=device)
-clip_model.eval()  # Đặt eval mode để tiết kiệm memory
+clip_model, _, clip_preprocess = open_clip.create_model_and_transforms(
+    'clip-vit-base-patch16-224-multilingual-v2', pretrained='laion400m_e32', device=device
+)
+clip_model.eval()
 
 def get_clip_score(image_path, prompt):
-    with torch.no_grad():  # Đảm bảo no_grad
+    with torch.no_grad():
         image = clip_preprocess(Image.open(image_path).convert('RGB')).unsqueeze(0).to(device)
-        text = clip.tokenize([prompt]).to(device)
+        text = open_clip.tokenize([prompt]).to(device)
         image_features = clip_model.encode_image(image)
         text_features = clip_model.encode_text(text)
         similarity = (image_features @ text_features.T).item()
-    del image, text, image_features, text_features  # Giải phóng ngay
+    del image, text, image_features, text_features
     torch.cuda.empty_cache()
     gc.collect()
     return similarity
@@ -65,15 +68,13 @@ model_id = 'models'
 txt2panoimg = Text2360PanoramaImagePipeline(model_id, torch_dtype=torch.float16)
 img2panoimg = Image2360PanoramaImagePipeline(model_id, torch_dtype=torch.float16)
 
-# FLUX setup với quantization 4-bit để giảm memory (nếu cần; comment nếu không OOM)
-from bitsandbytes.nn import BitsAndBytesConfig
-quant_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.bfloat16, bnb_4bit_quant_type="nf4")
 flux_model_id = "black-forest-labs/FLUX.1-dev"
-flux_pipe = FluxPipeline.from_pretrained(flux_model_id, torch_dtype=torch.bfloat16, quantization_config=quant_config)
-flux_pipe.to(device)  # Chạy full trên GPU, disable offload
-flux_pipe.vae.enable_slicing()  # Tối ưu VAE cho hình ảnh lớn
-flux_pipe.vae.enable_tiling()  # Thêm tiling để giảm memory
-torch.backends.cuda.matmul.allow_tf32 = True  # Tăng tốc và giảm memory nhẹ
+
+flux_pipe = DiffusionPipeline.from_pretrained(flux_model_id, torch_dtype=torch.bfloat16)
+flux_pipe.to(device)
+flux_pipe.vae.enable_slicing()
+flux_pipe.vae.enable_tiling()
+torch.backends.cuda.matmul.allow_tf32 = True
 
 # Main experiment
 N = 4  # Có thể giảm xuống 2 nếu vẫn OOM

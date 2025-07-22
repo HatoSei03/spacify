@@ -18,7 +18,7 @@ einops
 timm
 
 # Diffusion, transformers, and related
-transformers==4.38.2  # >=4.38.0 để tránh lỗi SiglipImageProcessor
+transformers==4.43.2  
 diffusers==0.26.0
 accelerate==1.6.0
 xformers==0.0.29.post2 --find-links https://download.pytorch.org/whl/cu118
@@ -33,8 +33,7 @@ realesrgan==0.3.0
 basicsr
 
 # Language & prompt
-langdetect
-clip @ git+https://github.com/openai/CLIP.git
+open_clip_torch
 
 # Progress, utils
 joblib
