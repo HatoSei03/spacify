@@ -18,11 +18,12 @@ einops
 timm
 
 # Diffusion, transformers, and related
-transformers==4.25.1
+transformers==4.38.2  # >=4.38.0 để tránh lỗi SiglipImageProcessor
 diffusers==0.26.0
 accelerate==1.6.0
 xformers==0.0.29.post2 --find-links https://download.pytorch.org/whl/cu118
 triton==3.2.0
+peft==0.15.0
 
 # 360/geometry
 py360convert==1.0.3
@@ -38,6 +39,7 @@ clip @ git+https://github.com/openai/CLIP.git
 # Progress, utils
 joblib
 tqdm
+gc
 
 # Misc
 plyfile
