@@ -1,20 +1,43 @@
-# Gaussian‐splatting submodules
+# Core ML/vision
 opencv-python
-diffusers==0.26.0
-accelerate==1.6.0
-transformers==4.25.1
-xformers==0.0.29.post2 --find-links https://download.pytorch.org/whl/cu118
-triton==3.2.0
-realesrgan==0.3.0
-py360convert==1.0.3
+numpy==1.26.4
+pandas
+scipy
+Pillow
+matplotlib
+seaborn
+scikit-learn
+
+# PyTorch & ecosystem
 --extra-index-url https://download.pytorch.org/whl/cu118
 torch==2.6.0
 torchvision==0.21.0
-numpy==1.26.4
-plyfile
-tqdm
-joblib
-pandas
+torchtext
+fvcore
 einops
 timm
-fvcore
+
+# Diffusion, transformers, and related
+transformers==4.25.1
+diffusers==0.26.0
+accelerate==1.6.0
+xformers==0.0.29.post2 --find-links https://download.pytorch.org/whl/cu118
+triton==3.2.0
+
+# 360/geometry
+py360convert==1.0.3
+
+# Super-resolution, GAN
+realesrgan==0.3.0
+basicsr
+
+# Language & prompt
+langdetect
+clip @ git+https://github.com/openai/CLIP.git
+
+# Progress, utils
+joblib
+tqdm
+
+# Misc
+plyfile
