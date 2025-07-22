@@ -49,8 +49,12 @@ parser.add_argument('--rank', type=int, default=0)
 parser.add_argument('--multiprocessing_distributed', default=True)
 parser.add_argument('--dist-backend', type=str, default="nccl")
 parser.add_argument('--dist-url', type=str, default="tcp://127.0.0.1:7777")
+parser.add_argument('--save_outputs', action='store_true', help='Lưu tất cả output trung gian nếu bật')
 
 config = parser.parse_args()
+
+import time
+start_time = time.time()
 
 torch.distributed.init_process_group(backend=config.dist_backend, init_method=config.dist_url,
                                      world_size=config.world_size, rank=config.rank)
@@ -292,5 +296,61 @@ def progressive_inpaint_optimized(ori_rgb, ori_depth):
 # load image and depth
 rgb = np.array(Image.open(rgb).convert('RGB'))
 depth = depth_est(rgb, net)
-progressive_inpaint_optimized(ori_rgb=rgb, ori_depth=depth)
+
+if config.save_outputs:
+    # Lưu panorama gốc
+    Image.fromarray(rgb).save('report_rgb_input.png')
+    np.save('report_depth_input.npy', depth)
+    Image.fromarray((depth/np.max(depth)*255).astype(np.uint8)).save('report_depth_cvs.png')
+    # Equirec2Cube: lưu 6 mặt cubemap gốc
+    from Projection import Equirec2Cube, Cube2Equirec
+    rgb_tensor = torch.FloatTensor(rgb.transpose(2,0,1)[None,...]) / 255.0
+    e2c = Equirec2Cube(512, 512).to(device)
+    cubemap = e2c(rgb_tensor.cuda()).cpu().numpy()
+    for i in range(6):
+        img = (cubemap[i].transpose(1,2,0)*255).astype(np.uint8)
+        Image.fromarray(img).save(f'report_cube_face_raw_{i}.png')
+    # Progressive inpaint: lưu mask, ảnh, depth từng bước dịch camera
+    num_inpaint = 0
+    directions = ['x', 'z', 'xz', '-xz']
+    for dir_idx, direction in enumerate(directions):
+        input_rgb = rgb
+        depth_ = depth
+        flag = 1
+        for i in range(step):
+            if i == min:
+                flag = -1
+                input_rgb = rgb
+                depth_ = depth
+            mask, img, depth1, mask_index = generate_optimized(
+                input_rgb, depth_, flag, direction, (i == 0 or i == min)
+            )
+            # Lưu mask, ảnh, depth từng bước
+            Image.fromarray(mask).save(f'report_mask_step{num_inpaint}_dir{direction}.png')
+            Image.fromarray(img).save(f'report_img_step{num_inpaint}_dir{direction}.png')
+            np.save(f'report_depth_step{num_inpaint}_dir{direction}.npy', depth1)
+            # Inpaint từng batch (giả sử batch=1 ở đây, nếu batch>1 thì lặp)
+            result = inpaint_image(mask, img)
+            Image.fromarray(result).save(f'report_inpainted_cube_step{num_inpaint}_dir{direction}.png')
+            # Depth completion sau inpaint
+            depth_result = depth_completion_optimized(result)
+            np.save(f'report_depth_after_inpaint_step{num_inpaint}_dir{direction}.npy', depth_result)
+            input_rgb = result
+            depth_ = depth_result
+            num_inpaint += 1
+    # Sau khi inpaint xong 6 mặt cubemap, ghép lại panorama mới
+    cubemap_inpainted = []
+    for i in range(6):
+        img = Image.open(f'report_inpainted_cube_step{i}_dirx.png') # hoặc đúng tên file bạn đã lưu
+        cubemap_inpainted.append(np.array(img).transpose(2,0,1))
+    cubemap_inpainted = np.stack(cubemap_inpainted)
+    cubemap_inpainted_tensor = torch.FloatTensor(cubemap_inpainted).cuda()
+    c2e = Cube2Equirec(512, 512).to(device)
+    pano_new = c2e(cubemap_inpainted_tensor[None,...]).cpu().numpy()[0].transpose(1,2,0)
+    Image.fromarray((pano_new*255).astype(np.uint8)).save('report_panorama_final.png')
+else:
+    # Chạy nhanh, chỉ tính thời gian, không lưu output trung gian
+    progressive_inpaint_optimized(ori_rgb=rgb, ori_depth=depth)
+    end_time = time.time()
+    print(f"Total time: {end_time - start_time:.2f} seconds")
 
