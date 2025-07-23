@@ -32,13 +32,10 @@ py360convert==1.0.3
 realesrgan==0.3.0
 basicsr
 
-# Language & prompt
-open_clip_torch
 
 # Progress, utils
 joblib
 tqdm
-gc
 
 # Misc
 plyfile

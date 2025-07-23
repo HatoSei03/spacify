@@ -15,6 +15,7 @@ parser.add_argument('--image_size', type=int, default=512,
                     help='image size used during training')
 parser.add_argument('--mask_type', type=str, default='pconv',
                     help='mask used during training')
+parser.add_argument('--save_outputs', action='store_true', help='Lưu tất cả output trung gian nếu bật')
 
 # model specifications 
 parser.add_argument('--model', type=str, default='aotgan',

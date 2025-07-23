@@ -19,10 +19,10 @@ from realesrgan import RealESRGANer
 from basicsr.archs.rrdbnet_arch import RRDBNet
 
 import concurrent.futures
-from torch.cuda.amp import autocast
+from torch.amp import autocast
 
 device = 'cuda:0'
-rgb = 'inpaint_data/demo.png'
+rgb = './data/selected_bestofn_images/pano_0_3.png'
 
 mov = 0.02
 step = 12
@@ -119,7 +119,7 @@ def inpaint_image(mask_path, rgb_path):
     return inpainted
 
 def depth_completion_optimized(input_rgb):
-    with autocast():
+    with autocast('cuda'):
         est_depth = depth_est(input_rgb, net)
     return est_depth
 
@@ -237,7 +237,9 @@ def generate_optimized(input_rgb, input_depth, flag, dir, first):
 def progressive_inpaint_optimized(ori_rgb, ori_depth):
     """Phiên bản tối ưu với batch processing"""
     num_inpaint = 0
-    
+    # Tạo sẵn folder Pano_inpaint nếu chưa có
+    os.makedirs('Pano_inpaint', exist_ok=True)
+
     # Pre-calculate tất cả masks và images cho tất cả directions
     all_masks = []
     all_images = []
@@ -287,7 +289,7 @@ def progressive_inpaint_optimized(ori_rgb, ori_depth):
                     all_images[idx] = result
                     all_depths[idx] = depth_result
                     
-                    Image.fromarray(result).save(f'Pano_inpaint/rgb_{num_inpaint}.png')
+                    Image.fromarray(result).save(f'Pano_inpaint/rgb_{num_inpaint}.jpg')
                     num_inpaint += 1
                     print(f'num_image {num_inpaint}')
     
@@ -297,11 +299,14 @@ def progressive_inpaint_optimized(ori_rgb, ori_depth):
 rgb = np.array(Image.open(rgb).convert('RGB'))
 depth = depth_est(rgb, net)
 
+output_dir = 'full_inpaint_outputs/'
+os.makedirs(output_dir, exist_ok=True)
+
 if config.save_outputs:
     # Lưu panorama gốc
-    Image.fromarray(rgb).save('report_rgb_input.png')
-    np.save('report_depth_input.npy', depth)
-    Image.fromarray((depth/np.max(depth)*255).astype(np.uint8)).save('report_depth_cvs.png')
+    Image.fromarray(rgb).save(f'{output_dir}rgb_input.jpg')
+    np.save(f'{output_dir}depth_input.npy', depth)
+    Image.fromarray((depth/np.max(depth)*255).astype(np.uint8)).save(f'{output_dir}depth_cvs.jpg')
     # Equirec2Cube: lưu 6 mặt cubemap gốc
     from Projection import Equirec2Cube, Cube2Equirec
     rgb_tensor = torch.FloatTensor(rgb.transpose(2,0,1)[None,...]) / 255.0
@@ -309,7 +314,7 @@ if config.save_outputs:
     cubemap = e2c(rgb_tensor.cuda()).cpu().numpy()
     for i in range(6):
         img = (cubemap[i].transpose(1,2,0)*255).astype(np.uint8)
-        Image.fromarray(img).save(f'report_cube_face_raw_{i}.png')
+        Image.fromarray(img).save(f'{output_dir}cube_face_raw_{i}.jpg')
     # Progressive inpaint: lưu mask, ảnh, depth từng bước dịch camera
     num_inpaint = 0
     directions = ['x', 'z', 'xz', '-xz']
@@ -326,28 +331,29 @@ if config.save_outputs:
                 input_rgb, depth_, flag, direction, (i == 0 or i == min)
             )
             # Lưu mask, ảnh, depth từng bước
-            Image.fromarray(mask).save(f'report_mask_step{num_inpaint}_dir{direction}.png')
-            Image.fromarray(img).save(f'report_img_step{num_inpaint}_dir{direction}.png')
-            np.save(f'report_depth_step{num_inpaint}_dir{direction}.npy', depth1)
+            Image.fromarray(mask).save(f'{output_dir}mask_step{num_inpaint}_dir{direction}.jpg')
+            Image.fromarray(img).save(f'{output_dir}img_step{num_inpaint}_dir{direction}.jpg')
+            np.save(f'{output_dir}depth_step{num_inpaint}_dir{direction}.npy', depth1)
             # Inpaint từng batch (giả sử batch=1 ở đây, nếu batch>1 thì lặp)
             result = inpaint_image(mask, img)
-            Image.fromarray(result).save(f'report_inpainted_cube_step{num_inpaint}_dir{direction}.png')
+            Image.fromarray(result).save(f'{output_dir}inpainted_cube_step{num_inpaint}_dir{direction}.jpg')
             # Depth completion sau inpaint
             depth_result = depth_completion_optimized(result)
-            np.save(f'report_depth_after_inpaint_step{num_inpaint}_dir{direction}.npy', depth_result)
+            np.save(f'{output_dir}depth_after_inpaint_step{num_inpaint}_dir{direction}.npy', depth_result)
             input_rgb = result
             depth_ = depth_result
             num_inpaint += 1
     # Sau khi inpaint xong 6 mặt cubemap, ghép lại panorama mới
+    # SỬA LOGIC: chỉ lấy đúng 4 file step=0 của mỗi direction
     cubemap_inpainted = []
-    for i in range(6):
-        img = Image.open(f'report_inpainted_cube_step{i}_dirx.png') # hoặc đúng tên file bạn đã lưu
+    for idx, direction in enumerate(directions):
+        img = Image.open(f'{output_dir}inpainted_cube_step0_dir{direction}.jpg')
         cubemap_inpainted.append(np.array(img).transpose(2,0,1))
     cubemap_inpainted = np.stack(cubemap_inpainted)
     cubemap_inpainted_tensor = torch.FloatTensor(cubemap_inpainted).cuda()
     c2e = Cube2Equirec(512, 512).to(device)
     pano_new = c2e(cubemap_inpainted_tensor[None,...]).cpu().numpy()[0].transpose(1,2,0)
-    Image.fromarray((pano_new*255).astype(np.uint8)).save('report_panorama_final.png')
+    Image.fromarray((pano_new*255).astype(np.uint8)).save(f'{output_dir}panorama_final.jpg')
 else:
     # Chạy nhanh, chỉ tính thời gian, không lưu output trung gian
     progressive_inpaint_optimized(ori_rgb=rgb, ori_depth=depth)
