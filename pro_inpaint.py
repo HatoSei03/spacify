@@ -22,7 +22,9 @@ import concurrent.futures
 from torch.amp import autocast
 
 device = 'cuda:0'
-rgb = './data/selected_bestofn_images/pano_0_3.png'
+input_img = os.getenv('PRO_INPAINT_INPUT', './data/selected_bestofn_images/pano_0_3.png')
+output_dir = os.getenv('PRO_INPAINT_OUTDIR', 'full_inpaint_outputs/')
+os.makedirs(output_dir, exist_ok=True)
 
 mov = 0.02
 step = 12
@@ -234,73 +236,36 @@ def generate_optimized(input_rgb, input_depth, flag, dir, first):
     
     return mask, img, d1[:, :, 0], mask_index
 
-def progressive_inpaint_optimized(ori_rgb, ori_depth):
-    """Phiên bản tối ưu với batch processing"""
+def progressive_inpaint_optimized(ori_rgb, ori_depth, output_dir):
+    """Phiên bản tối ưu, chỉ lưu đúng n*4 views, không batch overlap."""
     num_inpaint = 0
-    # Tạo sẵn folder Pano_inpaint nếu chưa có
-    os.makedirs('Pano_inpaint', exist_ok=True)
-
-    # Pre-calculate tất cả masks và images cho tất cả directions
-    all_masks = []
-    all_images = []
-    all_depths = []
-    
+    os.makedirs(output_dir, exist_ok=True)
     directions = ['x', 'z', 'xz', '-xz']
-    
     for dir_idx, direction in enumerate(directions):
         input_rgb = ori_rgb
         depth = ori_depth
         flag = 1
-        
         for i in range(step):
             if i == min:
                 flag = -1
                 input_rgb = ori_rgb
                 depth = ori_depth
-                
             mask, img, depth, mask_index = generate_optimized(
                 input_rgb, depth, flag, direction, (i == 0 or i == min)
             )
-            
-            all_masks.append(mask)
-            all_images.append(img)
-            all_depths.append(depth)
-            
-            # Batch inpaint thay vì từng cái một
-            if len(all_masks) >= 4:  # Process batch of 4
-                batch_masks = all_masks[-4:]
-                batch_images = all_images[-4:]
-                
-                # Batch inpaint
-                batch_results = []
-                for m, im in zip(batch_masks, batch_images):
-                    result = inpaint_image(m, im)
-                    batch_results.append(result)
-                
-                # Batch depth estimation
-                batch_depths = []
-                for result in batch_results:
-                    depth_result = depth_completion_optimized(result)
-                    batch_depths.append(depth_result)
-                
-                # Update input cho iteration tiếp theo
-                for j, (result, depth_result) in enumerate(zip(batch_results, batch_depths)):
-                    idx = len(all_masks) - 4 + j
-                    all_images[idx] = result
-                    all_depths[idx] = depth_result
-                    
-                    Image.fromarray(result).save(f'Pano_inpaint/rgb_{num_inpaint}.jpg')
-                    num_inpaint += 1
-                    print(f'num_image {num_inpaint}')
-    
+            # Inpaint và depth completion từng bước, không batch accumulate
+            result = inpaint_image(mask, img)
+            depth_result = depth_completion_optimized(result)
+            Image.fromarray(result).save(os.path.join(output_dir, f'rgb_{num_inpaint}.jpg'))
+            num_inpaint += 1
+            input_rgb = result
+            depth = depth_result
+            print(f'num_image {num_inpaint}')
     return num_inpaint
 
 # load image and depth
-rgb = np.array(Image.open(rgb).convert('RGB'))
+rgb = np.array(Image.open(input_img).convert('RGB'))
 depth = depth_est(rgb, net)
-
-output_dir = 'full_inpaint_outputs/'
-os.makedirs(output_dir, exist_ok=True)
 
 if config.save_outputs:
     # Lưu panorama gốc
@@ -316,12 +281,12 @@ if config.save_outputs:
         img = (cubemap[i].transpose(1,2,0)*255).astype(np.uint8)
         Image.fromarray(img).save(f'{output_dir}cube_face_raw_{i}.jpg')
     # Progressive inpaint: lưu mask, ảnh, depth từng bước dịch camera
-    num_inpaint = 0
     directions = ['x', 'z', 'xz', '-xz']
     for dir_idx, direction in enumerate(directions):
         input_rgb = rgb
         depth_ = depth
         flag = 1
+        num_inpaint = 0  # Đặt lại về 0 cho mỗi direction
         for i in range(step):
             if i == min:
                 flag = -1
@@ -344,7 +309,6 @@ if config.save_outputs:
             depth_ = depth_result
             num_inpaint += 1
     # Sau khi inpaint xong 6 mặt cubemap, ghép lại panorama mới
-    # SỬA LOGIC: chỉ lấy đúng 4 file step=0 của mỗi direction
     cubemap_inpainted = []
     for idx, direction in enumerate(directions):
         img = Image.open(f'{output_dir}inpainted_cube_step0_dir{direction}.jpg')
@@ -356,7 +320,7 @@ if config.save_outputs:
     Image.fromarray((pano_new*255).astype(np.uint8)).save(f'{output_dir}panorama_final.jpg')
 else:
     # Chạy nhanh, chỉ tính thời gian, không lưu output trung gian
-    progressive_inpaint_optimized(ori_rgb=rgb, ori_depth=depth)
+    progressive_inpaint_optimized(ori_rgb=rgb, ori_depth=depth, output_dir=output_dir)
     end_time = time.time()
     print(f"Total time: {end_time - start_time:.2f} seconds")
 
