@@ -27,6 +27,14 @@ parser.add_argument('--rates', type=str, default='1+2+4+8',
 parser.add_argument('--gan_type', type=str, default='smgan',
                     help='discriminator types')
 
+# ✅ Enhanced model specifications for better quality
+parser.add_argument('--enhanced_mode', action='store_true',
+                    help='enable enhanced mode with better quality')
+parser.add_argument('--block_num_enhanced', type=int, default=12,
+                    help='number of AOT blocks for enhanced mode')
+parser.add_argument('--rates_enhanced', type=str, default='1+2+4+8+16',
+                    help='dilation rates for enhanced mode')
+
 # hardware specifications 
 parser.add_argument('--seed', type=int, default=2021,
                     help='random seed')

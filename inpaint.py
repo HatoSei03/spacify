@@ -53,8 +53,8 @@ def inpaint(mask, rgb, in_model, upsampler):
         #AOT-GAN
         inpainted = main_worker(face_mask[:,:,0], face_img, in_model)
 
-        # You can optionally use a super-resolution algorithm to enhance the visual quality.
-        #inpainted, _ = upsampler.enhance(inpainted, outscale=2)
+        # ✅ ENABLE Super-resolution để tăng chất lượng
+        inpainted, _ = upsampler.enhance(inpainted, outscale=2)
 
         new_inpaint = torch.FloatTensor(inpainted.astype(np.float32)/255.0).permute(2, 0, 1)[None, ...].cuda()
         inpaint_images[i] = new_inpaint
@@ -66,7 +66,8 @@ def inpaint(mask, rgb, in_model, upsampler):
     equirec_img = equirec_img.permute(0, 2, 3, 1).cpu().numpy()
     equirec_img = (equirec_img * 255).astype(np.uint8)
     equirec_img = equirec_img.squeeze(0)
-    #equirec_img, _ = upsampler.enhance(equirec_img, outscale=2)
+    # ✅ ENABLE Super-resolution cho panorama cuối cùng
+    equirec_img, _ = upsampler.enhance(equirec_img, outscale=2)
 
     ori_rgb[ori_mask] = equirec_img[ori_mask]
 
@@ -113,6 +114,8 @@ def inpaint_optimized(mask, rgb, in_model, upsampler):
     
     for i in range(6):
         inpainted = main_worker(batch_masks[i], batch_inputs[i], in_model)
+        # ✅ ENABLE Super-resolution cho từng face
+        inpainted, _ = upsampler.enhance(inpainted, outscale=2)
         new_inpaint = torch.FloatTensor(inpainted.astype(np.float32)/255.0).permute(2, 0, 1)[None, ...].to(device)
         inpaint_images[i] = new_inpaint
     
@@ -120,6 +123,8 @@ def inpaint_optimized(mask, rgb, in_model, upsampler):
     equirec_img = equirec_img.permute(0, 2, 3, 1).cpu().numpy()
     equirec_img = (equirec_img * 255).astype(np.uint8)
     equirec_img = equirec_img.squeeze(0)
+    # ✅ ENABLE Super-resolution cho panorama cuối cùng
+    equirec_img, _ = upsampler.enhance(equirec_img, outscale=2)
     
     ori_rgb[ori_mask] = equirec_img[ori_mask]
     return ori_rgb

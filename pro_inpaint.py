@@ -99,6 +99,19 @@ upsampler = RealESRGANer(
             device=device,
         )
 
+# ✅ Enhanced upsampler với chất lượng cao hơn
+upsampler_x4 = RealESRGANer(
+            scale=4,
+            model_path=r'models/RealESRGAN_x4plus.pth',
+            dni_weight=dni_weight,
+            model=RRDBNet(num_in_ch=3, num_out_ch=3, num_feat=64, num_block=23, num_grow_ch=32, scale=4),
+            tile=384,
+            tile_pad=20,
+            pre_pad=20,
+            half=False,
+            device=device,
+        )
+
 # Cache depth estimation results
 _depth_cache = {}
 
@@ -118,6 +131,19 @@ def inpaint_image(mask_path, rgb_path):
     rgb = rgb_path
     inpainted = inpaint(mask, rgb, in_model, upsampler)
 
+    return inpainted
+
+def inpaint_image_enhanced(mask_path, rgb_path):
+    """Enhanced inpaint với chất lượng cao hơn"""
+    mask = mask_path
+    rgb = rgb_path
+    
+    # Sử dụng upsampler x4 cho chất lượng cao hơn
+    inpainted = inpaint(mask, rgb, in_model, upsampler_x4)
+    
+    # Post-processing để tăng độ sắc nét
+    inpainted = cv2.detailEnhance(inpainted, sigma_s=10, sigma_r=0.15)
+    
     return inpainted
 
 def depth_completion_optimized(input_rgb):
@@ -263,6 +289,33 @@ def progressive_inpaint_optimized(ori_rgb, ori_depth, output_dir):
             print(f'num_image {num_inpaint}')
     return num_inpaint
 
+def progressive_inpaint_enhanced(ori_rgb, ori_depth, output_dir):
+    """Phiên bản enhanced với chất lượng cao hơn"""
+    num_inpaint = 0
+    os.makedirs(output_dir, exist_ok=True)
+    directions = ['x', 'z', 'xz', '-xz']
+    for dir_idx, direction in enumerate(directions):
+        input_rgb = ori_rgb
+        depth = ori_depth
+        flag = 1
+        for i in range(step):
+            if i == min:
+                flag = -1
+                input_rgb = ori_rgb
+                depth = ori_depth
+            mask, img, depth, mask_index = generate_optimized(
+                input_rgb, depth, flag, direction, (i == 0 or i == min)
+            )
+            # Sử dụng enhanced inpaint cho chất lượng cao hơn
+            result = inpaint_image_enhanced(mask, img)
+            depth_result = depth_completion_optimized(result)
+            Image.fromarray(result).save(os.path.join(output_dir, f'rgb_enhanced_{num_inpaint}.jpg'))
+            num_inpaint += 1
+            input_rgb = result
+            depth = depth_result
+            print(f'num_image_enhanced {num_inpaint}')
+    return num_inpaint
+
 # load image and depth
 rgb = np.array(Image.open(input_img).convert('RGB'))
 depth = depth_est(rgb, net)
@@ -300,7 +353,10 @@ if config.save_outputs:
             Image.fromarray(img).save(f'{output_dir}img_step{num_inpaint}_dir{direction}.jpg')
             np.save(f'{output_dir}depth_step{num_inpaint}_dir{direction}.npy', depth1)
             # Inpaint từng batch (giả sử batch=1 ở đây, nếu batch>1 thì lặp)
-            result = inpaint_image(mask, img)
+            if args.enhanced_mode:
+                result = inpaint_image_enhanced(mask, img)
+            else:
+                result = inpaint_image(mask, img)
             Image.fromarray(result).save(f'{output_dir}inpainted_cube_step{num_inpaint}_dir{direction}.jpg')
             # Depth completion sau inpaint
             depth_result = depth_completion_optimized(result)
@@ -320,7 +376,14 @@ if config.save_outputs:
     Image.fromarray((pano_new*255).astype(np.uint8)).save(f'{output_dir}panorama_final.jpg')
 else:
     # Chạy nhanh, chỉ tính thời gian, không lưu output trung gian
-    progressive_inpaint_optimized(ori_rgb=rgb, ori_depth=depth, output_dir=output_dir)
+    # Kiểm tra enhanced mode flag
+    if args.enhanced_mode:
+        print("Running in ENHANCED mode for better quality...")
+        progressive_inpaint_enhanced(ori_rgb=rgb, ori_depth=depth, output_dir=output_dir)
+    else:
+        print("Running in NORMAL mode for faster processing...")
+        progressive_inpaint_optimized(ori_rgb=rgb, ori_depth=depth, output_dir=output_dir)
+    
     end_time = time.time()
     print(f"Total time: {end_time - start_time:.2f} seconds")
 
